@@ -176,6 +176,69 @@ impl<T> Labeled<T> {
     }
 }
 
+trait HasNoPolicyInfo {}
+impl HasNoPolicyInfo for File {}
+impl HasNoPolicyInfo for Directory {}
+impl HasNoPolicyInfo for Blob {}
+
+trait MaybeStorageInfo {
+    fn get_storage_info(&self) -> Option<StorageInfo>;
+}
+
+impl<T: Serialize + HasNoPolicyInfo> MaybeStorageInfo for Labeled<T> {
+    fn get_storage_info(&self) -> Option<StorageInfo> {
+        Some(StorageInfo::new(
+            1,
+            serde_json::to_vec(&self.label).ok()?.as_slice().len(),
+            serde_json::to_vec(&self.data).ok()?.as_slice().len(),
+            serde_json::to_vec(&self.label).ok()?.as_slice().len(),
+        ))
+    }
+}
+
+impl MaybeStorageInfo for Labeled<Service> {
+    fn get_storage_info(&self) -> Option<StorageInfo> {
+        let label_bytes = serde_json::to_vec(&self.label).ok()?.as_slice().len();
+        let data_bytes = serde_json::to_vec(&self.data).ok()?.as_slice().len();
+        let policy_bytes = label_bytes
+            + serde_json::to_vec(&self.data.privilege).ok()?.as_slice().len()
+            + serde_json::to_vec(&self.data.invoker_integrity_clearance).ok()?.as_slice().len()
+            + serde_json::to_vec(&self.data.taint).ok()?.as_slice().len();
+        Some(StorageInfo::new(1, label_bytes, data_bytes, policy_bytes))
+    }
+}
+
+impl MaybeStorageInfo for Labeled<Gate> {
+    fn get_storage_info(&self) -> Option<StorageInfo> {
+        let label_bytes = serde_json::to_vec(&self.label).ok()?.as_slice().len();
+        let data_bytes = serde_json::to_vec(&self.data).ok()?.as_slice().len();
+        match &self.data {
+            Gate::Direct(gate) => {
+                let policy_bytes = label_bytes
+                    + serde_json::to_vec(&gate.privilege).ok()?.as_slice().len()
+                    + serde_json::to_vec(&gate.invoker_integrity_clearance).ok()?.as_slice().len()
+                    + serde_json::to_vec(&gate.declassify).ok()?.as_slice().len();
+                Some(StorageInfo::new(1, label_bytes, data_bytes, policy_bytes))
+            }
+            Gate::Redirect(gate) => {
+                let policy_bytes = label_bytes
+                    + serde_json::to_vec(&gate.privilege).ok()?.as_slice().len()
+                    + serde_json::to_vec(&gate.invoker_integrity_clearance).ok()?.as_slice().len()
+                    + serde_json::to_vec(&gate.declassify).ok()?.as_slice().len();
+                Some(StorageInfo::new(1, label_bytes, data_bytes, policy_bytes))
+            }
+        }
+    }
+}
+
+impl MaybeStorageInfo for FacetedDirectory {
+    fn get_storage_info(&self) -> Option<StorageInfo> {
+        let total_bytes = serde_json::to_vec(&self.facets).ok()?.as_slice().len();
+        let label_bytes = self.facets.iter().fold(0, |acc, (l, _)| acc + serde_json::to_vec(l).unwrap().as_slice().len());
+        Some(StorageInfo::new(1, label_bytes, total_bytes - label_bytes, 0)) // Policy bytes are stored in each directory
+    }
+}
+
 impl<T: Default + Serialize> ObjectRef<Labeled<T>> {
     pub fn create<B: BackingStore>(label: Buckle, storage: &B) -> Self {
         let labeled = Labeled {
@@ -708,6 +771,139 @@ impl<S: BackingStore> FS<S> {
         }
     }
 
+    pub fn get_storage_info(&mut self) -> Option<BTreeMap<String, StorageInfo>> {
+        use std::collections::HashSet;
+
+        let mut stats = BTreeMap::new();
+        let mut visited = HashSet::new();
+        let mut remaining = vec![DirEntry::Directory(ROOT_REF)];
+
+        while let Some(entry) = remaining.pop() {
+            match entry {
+                DirEntry::Directory(dir) => {
+                    if !visited.insert(dir.uid) { continue; }
+                    let obj = dir.get(&self)?;
+                    let stats_key = "Directory";
+                    if let Some(collected) = stats.insert(stats_key.to_owned(), obj.get_storage_info()?) {
+                        if let Some(s) = stats.get_mut(stats_key) {
+                            *s += collected;
+                        };
+                    }
+                    for entry in dir.list(&self).into_values() {
+                        remaining.push(entry);
+                    }
+                }
+                DirEntry::FacetedDirectory(fdir) => {
+                    if !visited.insert(fdir.uid) { continue; }
+                    let obj = fdir.get(&self)?;
+                    let stats_key = "FacetedDirectory";
+                    if let Some(collected) = stats.insert(stats_key.to_owned(), obj.get_storage_info()?) {
+                        if let Some(s) = stats.get_mut(stats_key) {
+                            *s += collected;
+                        };
+                    }
+                    for entry in fdir.list(&self, &Buckle::top()).into_values() {
+                        remaining.push(DirEntry::Directory(entry))
+                    }
+                }
+                DirEntry::File(file) => {
+                    if !visited.insert(file.uid) { continue; }
+                    let obj = file.get(&self)?;
+                    let stats_key = "File";
+                    if let Some(collected) = stats.insert(stats_key.to_owned(), obj.get_storage_info()?) {
+                        if let Some(s) = stats.get_mut(stats_key) {
+                            *s += collected;
+                        };
+                    }
+                }
+                DirEntry::Blob(blob) => {
+                    if !visited.insert(blob.uid) { continue; }
+                    let obj = blob.get(&self)?;
+                    let stats_key = "Blob";
+                    if let Some(collected) = stats.insert(stats_key.to_owned(), obj.get_storage_info()?) {
+                        if let Some(s) = stats.get_mut(stats_key) {
+                            *s += collected;
+                        };
+                    }
+                }
+                DirEntry::Gate(gate) => {
+                    if !visited.insert(gate.uid) { continue; }
+                    let obj = gate.get(&self)?;
+                    let stats_key = "Gate";
+                    if let Some(collected) = stats.insert(stats_key.to_owned(), obj.get_storage_info()?) {
+                        if let Some(s) = stats.get_mut(stats_key) {
+                            *s += collected;
+                        };
+                    }
+                }
+                DirEntry::Service(service) => {
+                    if !visited.insert(service.uid) { continue; }
+                    let obj = service.get(&self)?;
+                    let stats_key = "Service";
+                    if let Some(collected) = stats.insert(stats_key.to_owned(), obj.get_storage_info()?) {
+                        if let Some(s) = stats.get_mut(stats_key) {
+                            *s += collected;
+                        };
+                    }
+                }
+            }
+        }
+
+        Some(stats)
+    }
+}
+
+#[derive(Debug)]
+pub struct StorageInfo {
+    pub objects: usize,
+    pub label_bytes: usize,
+    pub data_bytes: usize,
+    pub policy_bytes: usize,
+}
+
+impl StorageInfo {
+    fn new(objects: usize, label_bytes: usize, data_bytes: usize, policy_bytes: usize) -> StorageInfo {
+        StorageInfo { objects, label_bytes, data_bytes, policy_bytes }
+    }
+}
+
+impl std::ops::Add<StorageInfo> for StorageInfo {
+    type Output = StorageInfo;
+
+    fn add(self, rhs: StorageInfo) -> Self::Output {
+        StorageInfo::new(
+            self.objects + rhs.objects,
+            self.label_bytes + rhs.label_bytes,
+            self.data_bytes + rhs.data_bytes,
+            self.policy_bytes + rhs.policy_bytes,
+        )
+    }
+}
+
+impl std::ops::AddAssign for StorageInfo {
+    fn add_assign(&mut self, rhs: Self) {
+        self.objects += rhs.objects;
+        self.label_bytes += rhs.label_bytes;
+        self.data_bytes += rhs.data_bytes;
+        self.policy_bytes += rhs.policy_bytes;
+    }
+}
+
+impl std::fmt::Display for StorageInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,
+               "total bytes (w object keys): {}\n\
+               total bytes (w/o object keys): {}\n\
+               label bytes: {}\n\
+               policy bytes: {}\n\
+               object counts : {}",
+               self.objects * 8 + self.data_bytes + self.label_bytes,
+               self.data_bytes +  self.label_bytes,
+               self.label_bytes,
+               self.policy_bytes,
+               self.objects
+        )
+    }
 }
 
 // Backing store trait

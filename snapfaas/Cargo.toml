@@ -20,6 +20,10 @@ path = "bins/multivm/main.rs"
 name = "scheduler"
 path = "bins/scheduler/main.rs"
 
+[[bin]]
+name = "storage-breakdown"
+path = "bins/storage-breakdown/main.rs"
+
 #[[bin]]
 #name = "garbage-collector"
 #path = "bins/garbage-collector/main.rs"

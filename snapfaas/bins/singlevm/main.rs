@@ -17,7 +17,16 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::time::Instant;
 
-use clap::Parser;
+use clap::{Args, Parser};
+
+#[derive(Args, Debug)]
+#[group(required = false, multiple = true)]
+pub struct CliBlob {
+    #[arg(long, value_name = "PATH")]
+    pub blob_path: Option<String>,
+    #[arg(long, value_name = "NAME")]
+    pub blob_name: Option<String>,
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -25,7 +34,7 @@ struct Cli {
     #[command(flatten)]
     vmconfig: cli::VmConfig,
     /// If present, force singlevm to exit once firerunner exits
-    #[arg(long, requires = "dump_snapshot")]
+    #[arg(long)]
     force_exit: bool,
     /// Faasten ID
     #[arg(long)]
@@ -35,6 +44,8 @@ struct Cli {
     start_label: Option<String>,
     #[command(flatten)]
     store: cli::Store,
+    #[command(flatten)]
+    blob: CliBlob,
 }
 
 fn main() {
@@ -132,14 +143,27 @@ fn main() {
 
     // Synchronously send the request to vm and wait for a response
     let dump_working_set = true && cli.vmconfig.dump.dump_ws;
+
+    let cli_blob = cli.blob;
     for req in requests {
+        let blobs: std::collections::HashMap<String, snapfaas::blobstore::Blob> = cli_blob
+            .blob_path
+            .as_ref()
+            .map_or(Default::default(), |path| {
+                let mut file = std::fs::File::open(path).unwrap();
+                let mut blob = env.blobstore.create().unwrap();
+                let _ = std::io::copy(&mut file, &mut blob);
+                let blob = env.blobstore.save(blob).unwrap();
+                [(cli_blob.blob_name.as_ref().map_or("blob".to_owned(), |n| n.clone()), blob)].into()
+            });
+
         let t1 = Instant::now();
         debug!("request: {:?}", req);
         let processor =
             syscall_server::SyscallProcessor::new(&mut env, startlbl.clone(), mypriv.clone());
         match processor.run(
             req.into(),
-            Default::default(),
+            blobs,
             Default::default(),
             mypriv.clone(),
             &mut vm,

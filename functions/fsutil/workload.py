@@ -38,6 +38,14 @@ def handle(syscall, payload=b'', blobs={}, **kwargs):
                 if res is not None:
                     ret["success"] = True
                     ret["value"] = res
+        case "link":
+            ret["success"] = False
+            with syscall.root().open_at(args["base"]) as dir:
+                with syscall.root().open_at(args["target"]) as target:
+                    res = dir.link(target, args["name"])
+                if res is not None:
+                    ret["success"] = res.success
+                    ret["value"] = res.fd
         case "unlink":
             ret["success"] = False
             with syscall.root().open_at(args["base"]) as dir:
