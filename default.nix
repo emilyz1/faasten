@@ -1,5 +1,13 @@
-{ pkgs ? import <nixpkgs> {}} :
+{}:
 
+let
+  nixpkgsSrc = builtins.fetchGit {
+    url = "https://github.com/NixOS/nixpkgs";
+    ref = "nixos-24.05";
+    rev = "3c80acabe4eef35d8662733c7e058907fa33a65d";
+  };
+  pkgs = import nixpkgsSrc {};
+in
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "faasten";
   version = "0.1.0";
