@@ -4,5 +4,5 @@ members = [
     "snapfaas",
     #"frontends/httpserver",
     # TODO webhook needs migrating to use scheduler rpc "frontends/webhook",
-    "frontends/webfront",
+    "frontends/webfront", "fuse-test/mount",
 ]
