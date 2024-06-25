@@ -205,15 +205,16 @@ impl Filesystem for JsonFilesystem {
                 let mut content_str = content.pretty().to_string();
                 let new_data = std::str::from_utf8(data).unwrap();
                 content_str.insert_str(offset as usize, new_data);
-                self.tree.insert(key.clone(), json::Json::String(content_str));
+                self.tree.insert(key.clone(), json::Json::String(content_str.clone())); // Clone here
                 let attr = self.attrs.get_mut(&ino).unwrap();
-                attr.size = content_str.len() as u64;
+                attr.size = content_str.len() as u64; // Use the cloned content_str
                 reply.written(data.len() as u32);
                 return;
             }
         }
         reply.error(ENOENT);
     }
+    
 }
 
 fn main() {
