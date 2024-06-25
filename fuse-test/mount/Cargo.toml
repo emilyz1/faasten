@@ -8,4 +8,8 @@ libc = "0.2.51"
 fuser = "0.14.0"
 env_logger = "0.11.3"
 clap = { version = "4.4", features = ["cargo", "derive"] }
+fuse = "0.3.1"
+time = "0.1.44"
+libc = "0.2"
+rustc-serialize = "0.3.24"
 
