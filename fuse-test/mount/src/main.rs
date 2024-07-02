@@ -1,10 +1,3 @@
-extern crate fuse;
-extern crate time;
-extern crate libc;
-extern crate rustc_serialize;
-extern crate v-sock;
-extern crate pkg-config;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
     FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
