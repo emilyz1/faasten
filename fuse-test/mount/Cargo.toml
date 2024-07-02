@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 fuser = "0.14"
-clap = { version = "4.5.8", features = ["cargo"] }
-libc = "0.2.155"
-env_logger = "0.11.3"
-pkg-config = "0.3.30"
+clap = { version = "3.0", features = ["cargo"] }
+libc = "0.2.51"
+env_logger = "0.9"
+pkg-config = "0.3"
 
 
