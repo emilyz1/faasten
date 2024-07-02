@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fuser = "0.14"
+fuser = "0.12"
 clap = { version = "4.5.8", features = ["cargo"] }
 libc = "0.2.51"
 env_logger = "0.9"
