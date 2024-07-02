@@ -58,7 +58,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(&mut self, _req: &Request, ino: u64, _fh: Option<u64>, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
         match ino {
             1 => reply.attr(&TTL, &HELLO_DIR_ATTR),
             2 => reply.attr(&TTL, &HELLO_TXT_ATTR),
@@ -70,7 +70,6 @@ impl Filesystem for HelloFS {
         &mut self,
         _req: &Request,
         ino: u64,
-        _fh: u64,
         offset: i64,
         _size: u32,
         _flags: i32,
@@ -88,7 +87,6 @@ impl Filesystem for HelloFS {
         &mut self,
         _req: &Request,
         ino: u64,
-        _fh: u64,
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
