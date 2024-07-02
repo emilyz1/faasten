@@ -70,6 +70,7 @@ impl Filesystem for HelloFS {
         &mut self,
         _req: &Request,
         ino: u64,
+        _fh: u64,
         offset: i64,
         _size: u32,
         _flags: i32,
@@ -87,6 +88,7 @@ impl Filesystem for HelloFS {
         &mut self,
         _req: &Request,
         ino: u64,
+        _fh: u64,
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
