@@ -8,6 +8,6 @@ fuser = "0.14"
 clap = { version = "3.0", features = ["cargo"] }
 libc = "0.2.51"
 env_logger = "0.9"
-pkg-config = "0.3"
+pkg-config = "0.3.30"
 
 
