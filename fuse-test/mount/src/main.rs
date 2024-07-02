@@ -1,3 +1,5 @@
+extern crate vsock;
+
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
     FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
@@ -5,7 +7,11 @@ use fuser::{
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
+use std::io::{Error, Read, Write};
 use std::time::{Duration, UNIX_EPOCH};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use protobuf::Message;
+use vsock::VsockStream;
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
@@ -47,7 +53,54 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     blksize: 512,
 };
 
+struct File {
+    fd: i32,
+    syscall: Syscall,
+}
+
+impl File {
+    fn new(fd: i32, syscall: Syscall) -> Self {
+        File { fd, syscall }
+    }
+
+    fn read(&mut self) -> Result<Option<Vec<u8>>, Error> {
+        let mut req = syscalls::Syscall::new();
+        let mut dent_read = syscalls::DentRead::new();
+        dent_read.set_fd(self.fd);
+        req.set_dentRead(dent_read);
+
+        self.syscall._send(&req)?;
+
+        let mut response = syscalls::DentResult::new();
+        self.syscall._recv(&mut response)?;
+
+        if response.get_success() {
+            Ok(Some(response.get_data().to_vec()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn write(&mut self, data: Vec<u8>) -> Result<bool, Error> {
+        let mut req = syscalls::Syscall::new();
+        let mut dent_update = syscalls::DentUpdate::new();
+        dent_update.set_fd(self.fd);
+        dent_update.set_file(data);
+        req.set_dentUpdate(dent_update);
+
+        self.syscall._send(&req)?;
+
+        let mut response = syscalls::DentResult::new();
+        self.syscall._recv(&mut response)?;
+
+        Ok(response.get_success())
+    }
+}
+
 struct HelloFS;
+struct Syscall {
+    sock: VsockStream,
+}
 
 impl Filesystem for HelloFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
@@ -146,6 +199,27 @@ fn main() {
         options.push(MountOption::AllowRoot);
     }
     fuser::mount2(HelloFS, mountpoint, &options).unwrap();
+}
+
+impl Syscall {
+    fn new(sock: VsockStream) -> Self {
+        Syscall { sock }
+    }
+
+    fn _send<M: Message>(&mut self, obj: &M) -> Result<(), Error> {
+        let obj_data = obj.write_to_bytes().unwrap();
+        self.sock.write_u32::<BigEndian>(obj_data.len() as u32)?;
+        self.sock.write_all(&obj_data)?;
+        Ok(())
+    }
+
+    fn _recv<M: Message>(&mut self, obj: &mut M) -> Result<(), Error> {
+        let len = self.sock.read_u32::<BigEndian>()?;
+        let mut buffer = vec![0; len as usize];
+        self.sock.read_exact(&mut buffer)?;
+        obj.merge_from_bytes(&buffer)?;
+        Ok(())
+    }
 }
 
 /* Rust already has third-party crate that allows you to talk to v-sock 
