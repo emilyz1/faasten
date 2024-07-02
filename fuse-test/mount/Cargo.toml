@@ -4,11 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-libc = "0.2.51"
-log = "0.4.6"
-fuser = "0.14.0"
+fuser = "0.14"
+clap = { version = "4.5.8", features = ["cargo"] }
+libc = "0.2.155"
 env_logger = "0.11.3"
-clap = { version = "4.4", features = ["cargo", "derive"] }
 pkg-config = "0.3.30"
 
 
