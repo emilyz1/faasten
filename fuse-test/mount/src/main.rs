@@ -7,18 +7,16 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use protobuf::Message;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use vsock::VsockStream;
+// use vsock::VsockStream;
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
-    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
-    Request,
+    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
 use std::time::{Duration, UNIX_EPOCH};
 
-mod syscall;
-use syscall::{File, Syscall};
+//use syscall::{File, Syscall};
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
@@ -70,7 +68,7 @@ impl File {
     }
 
     pub fn read(&self) -> Option<Vec<u8>> {
-        let mut req = Syscall::new();
+        let mut req = Syscall::new(TcpStream);
         req.set_dentRead(DentRead { fd: self.fd });
 
         self.syscall.send(&req);
@@ -100,16 +98,12 @@ impl File {
     }
 }
 
-pub struct Syscall {
-    sock: TcpStream,
-}
-
 impl Syscall {
     pub fn new(sock: TcpStream) -> Self {
         Syscall { sock }
     }
 
-    pub fn send<M: Message>(&self, message: &M) {
+    pub fn send<M: Message>(&mut self, message: &M) {
         let data = message.write_to_bytes().unwrap();
         let size = data.len() as u32;
         self.sock.write_u32::<BigEndian>(size).unwrap();
@@ -190,7 +184,7 @@ impl Filesystem for HelloFS {
         if ino == 2 {
             let file = File::new(2, self.syscall.clone());
             if file.write(data.to_vec()) {
-                reply.ok();
+                reply.data(data);
             } else {
                 reply.error(ENOENT);
             }
@@ -224,7 +218,7 @@ impl Filesystem for HelloFS {
                 break;
             }
         }
-        reply.ok();
+        reply.data(data);
     }
 }
 
