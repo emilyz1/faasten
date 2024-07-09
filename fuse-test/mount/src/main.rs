@@ -1,3 +1,5 @@
+include!(concat!(env!("OUT_DIR"), "/fuse-test.syscalls.rs"));
+
 extern crate vsock;
 
 use clap::{crate_version, Arg, ArgAction, Command};
