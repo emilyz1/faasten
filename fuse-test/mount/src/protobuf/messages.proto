@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package snapfaas.sched.messages;
+
+import "syscalls.proto";
+
+// Begin of request messages
+message GetTask {
+    uint64 threadId = 1;
+}
+
+message FinishTask {
+    string taskId = 1;
+    TaskReturn result = 2;
+}
+
+message Function {
+  uint64 memory = 1;
+  string appImage = 2;
+  string runtime = 3;
+  string kernel = 4;
+}
+
+message LabeledInvoke {
+    Function             function         = 1;
+    syscalls.Buckle      label            = 2;
+    syscalls.Component   gatePrivilege    = 3;
+    bytes                payload          = 4;
+    map <string, string> blobs            = 5;
+    map <string, string> headers          = 6;
+    bool                 sync             = 7;
+    syscalls.Component   invoker          = 8;
+}
+
+message UpdateResource {
+    bytes info = 1;
+}
+
+message DropResource {}
+message TerminateAll {}
+// End of request messages
+
+// Begin of response messages
+message ProcessTask {
+    string        taskId        = 1;
+    LabeledInvoke labeledInvoke = 2;
+}
+
+message Terminate {}
+message Fail {}
+message Ping {}
+message Pong {}
+// End of response messages
+
+message Request {
+    oneof kind {
+        // Worker
+        GetTask        getTask        = 1;
+        FinishTask     finishTask     = 2;
+        LabeledInvoke  labeledInvoke  = 3;
+        // Local resource manager
+        UpdateResource updateResource = 4;
+        DropResource   dropResource   = 5;
+        // Debug
+        TerminateAll   terminateAll   = 6;
+        Ping           ping           = 7;
+    }
+}
+
+message Response {
+    oneof kind {
+        // Worker
+        ProcessTask processTask = 1;
+        Terminate   terminate   = 2;
+        // Debug
+        Fail        fail        = 3;
+        TaskReturn  success     = 4;
+        Pong        pong        = 5;
+    }
+}
+
+enum ReturnCode {
+    ResourceExhausted = 0;
+    LaunchFailed = 1;
+    ProcessRequestFailed = 2;
+    GateNotExist = 3;
+    Success = 4;
+    QueueFull = 5;
+}
+
+message TaskReturn {
+    ReturnCode code = 1;
+    syscalls.Response payload = 2;
+    syscalls.Buckle label = 3;
+}
