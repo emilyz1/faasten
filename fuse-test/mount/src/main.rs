@@ -67,7 +67,7 @@ impl File {
         File { fd, syscall }
     }
 
-    fn read(&mut self) -> Result<Option<Vec<u8>>, Error> {
+    fn read(&mut self) -> Result<Option<Vec<u8>>> {
         let mut req = syscalls::Syscall::new();
         let mut dent_read = syscalls::DentRead::new();
         dent_read.set_fd(self.fd);
@@ -85,7 +85,7 @@ impl File {
         }
     }
 
-    fn write(&mut self, data: Vec<u8>) -> Result<bool, Error> {
+    fn write(&mut self, data: Vec<u8>) -> Result<bool> {
         let mut req = syscalls::Syscall::new();
         let mut dent_update = syscalls::DentUpdate::new();
         dent_update.set_fd(self.fd);
@@ -205,14 +205,14 @@ impl Syscall {
         Syscall { sock }
     }
 
-    fn _send<M: Message>(&mut self, obj: &M) -> Result<(), Error> {
+    fn _send<M: Message>(&mut self, obj: &M) -> Result<()> {
         let obj_data = obj.write_to_bytes().unwrap();
         self.sock.write_u32::<BigEndian>(obj_data.len() as u32)?;
         self.sock.write_all(&obj_data)?;
         Ok(())
     }
 
-    fn _recv<M: Message>(&mut self, obj: &mut M) -> Result<(), Error> {
+    fn _recv<M: Message>(&mut self, obj: &mut M) -> Result<()> {
         let len = self.sock.read_u32::<BigEndian>()?;
         let mut buffer = vec![0; len as usize];
         self.sock.read_exact(&mut buffer)?;
