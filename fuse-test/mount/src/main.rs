@@ -7,7 +7,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use protobuf::Message;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-// use vsock::VsockStream;
+use vsock::VsockStream;
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
     FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry
@@ -57,66 +57,38 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
 };
 
 
-pub struct File {
-    fd: i32,
-    syscall: Syscall,
+struct File {
+    fd: u64,
+    vsock_stream: Option<VsockStream>,
 }
 
 impl File {
-    pub fn new(fd: i32, syscall: Syscall) -> Self {
-        File { fd, syscall }
-    }
-
-    pub fn read(&self) -> Option<Vec<u8>> {
-        let mut req = Syscall::new(TcpStream);
-        req.set_dentRead(DentRead { fd: self.fd });
-
-        self.syscall.send(&req);
-
-        if let Ok(response) = self.syscall.recv::<DentResult>() {
-            if response.get_success() {
-                return Some(response.get_data().to_vec());
-            }
+    // establish vsock connection
+    pub fn new(fd: u64, cid: u64, port: u32) -> Self {
+        let vsock_addr = vsock::SockAddr::new(cid, port);
+        let vsock_stream = VsockStream::connect(vsock_addr).unwrap(); // Adjust error handling as needed
+        File {
+            fd,
+            vsock_stream: Some(vsock_stream),
         }
-        None
     }
 
-    pub fn write(&self, data: Vec<u8>) -> bool {
-        let mut update = DentUpdate::new();
-        update.set_fd(self.fd);
-        update.set_file(data);
-
-        let mut req = Syscall::new();
-        req.set_dentUpdate(update);
-
-        self.syscall.send(&req);
-
-        if let Ok(response) = self.syscall.recv::<DentResult>() {
-            return response.get_success();
+    pub fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        if let Some(ref mut stream) = self.vsock_stream {
+            stream.write_all(data)?;
+            Ok(data.len())
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "vsock stream not initialized"))
         }
-        false
-    }
-}
-
-impl Syscall {
-    pub fn new(sock: TcpStream) -> Self {
-        Syscall { sock }
     }
 
-    pub fn send<M: Message>(&mut self, message: &M) {
-        let data = message.write_to_bytes().unwrap();
-        let size = data.len() as u32;
-        self.sock.write_u32::<BigEndian>(size).unwrap();
-        self.sock.write_all(&data).unwrap();
-    }
-
-    pub fn recv<M: Message + Default>(&self) -> Result<M, std::io::Error> {
-        let size = self.sock.read_u32::<BigEndian>()?;
-        let mut buf = vec![0; size as usize];
-        self.sock.read_exact(&mut buf)?;
-        let mut message = M::default();
-        message.merge_from_bytes(&buf)?;
-        Ok(message)
+    pub fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if let Some(ref mut stream) = self.vsock_stream {
+            stream.read_exact(buf)?;
+            Ok(buf.len())
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "vsock stream not initialized"))
+        }
     }
 }
 
