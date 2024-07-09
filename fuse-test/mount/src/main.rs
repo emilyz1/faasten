@@ -3,6 +3,11 @@
 
 extern crate vsock;
 
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use protobuf::Message;
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use vsock::VsockStream;
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
     FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
@@ -10,11 +15,10 @@ use fuser::{
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
-use std::io::{Error, Read, Write, Result};
 use std::time::{Duration, UNIX_EPOCH};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use protobuf::Message;
-use vsock::VsockStream;
+
+mod syscall;
+use syscall::{File, Syscall};
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
@@ -22,7 +26,7 @@ const HELLO_DIR_ATTR: FileAttr = FileAttr {
     ino: 1,
     size: 0,
     blocks: 0,
-    atime: UNIX_EPOCH, // 1970-01-01 00:00:00
+    atime: UNIX_EPOCH,
     mtime: UNIX_EPOCH,
     ctime: UNIX_EPOCH,
     crtime: UNIX_EPOCH,
@@ -35,8 +39,6 @@ const HELLO_DIR_ATTR: FileAttr = FileAttr {
     flags: 0,
     blksize: 512,
 };
-
-const HELLO_TXT_CONTENT: &str = "Hello World!\n";
 
 const HELLO_TXT_ATTR: FileAttr = FileAttr {
     ino: 2,
@@ -55,51 +57,87 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
     blksize: 512,
 };
-/*
-struct File {
+
+
+pub struct File {
     fd: i32,
     syscall: Syscall,
-} */
-struct HelloFS;
-/*
+}
+
 impl File {
-    fn new(fd: i32, syscall: Syscall) -> Self {
+    pub fn new(fd: i32, syscall: Syscall) -> Self {
         File { fd, syscall }
     }
 
-    fn read(&mut self) -> Result<Option<Vec<u8>>> {
-        let mut req = syscalls::Syscall::new();
-        let mut dent_read = syscalls::DentRead::new();
-        dent_read.set_fd(self.fd);
-        req.set_dentRead(dent_read);
+    pub fn read(&self) -> Option<Vec<u8>> {
+        let mut req = Syscall::new();
+        req.set_dentRead(DentRead { fd: self.fd });
 
-        self.syscall._send(&req)?;
+        self.syscall.send(&req);
 
-        let mut response = syscalls::DentResult::new();
-        self.syscall._recv(&mut response)?;
-
-        if response.get_success() {
-            Ok(Some(response.get_data().to_vec()))
-        } else {
-            Ok(None)
+        if let Ok(response) = self.syscall.recv::<DentResult>() {
+            if response.get_success() {
+                return Some(response.get_data().to_vec());
+            }
         }
+        None
     }
 
-    fn write(&mut self, data: Vec<u8>) -> Result<bool> {
-        let mut req = syscalls::Syscall::new();
-        let mut dent_update = syscalls::DentUpdate::new();
-        dent_update.set_fd(self.fd);
-        dent_update.set_file(data);
-        req.set_dentUpdate(dent_update);
+    pub fn write(&self, data: Vec<u8>) -> bool {
+        let mut update = DentUpdate::new();
+        update.set_fd(self.fd);
+        update.set_file(data);
 
-        self.syscall._send(&req)?;
+        let mut req = Syscall::new();
+        req.set_dentUpdate(update);
 
-        let mut response = syscalls::DentResult::new();
-        self.syscall._recv(&mut response)?;
+        self.syscall.send(&req);
 
-        Ok(response.get_success())
+        if let Ok(response) = self.syscall.recv::<DentResult>() {
+            return response.get_success();
+        }
+        false
     }
-} */
+}
+
+pub struct Syscall {
+    sock: TcpStream,
+}
+
+impl Syscall {
+    pub fn new(sock: TcpStream) -> Self {
+        Syscall { sock }
+    }
+
+    pub fn send<M: Message>(&self, message: &M) {
+        let data = message.write_to_bytes().unwrap();
+        let size = data.len() as u32;
+        self.sock.write_u32::<BigEndian>(size).unwrap();
+        self.sock.write_all(&data).unwrap();
+    }
+
+    pub fn recv<M: Message + Default>(&self) -> Result<M, std::io::Error> {
+        let size = self.sock.read_u32::<BigEndian>()?;
+        let mut buf = vec![0; size as usize];
+        self.sock.read_exact(&mut buf)?;
+        let mut message = M::default();
+        message.merge_from_bytes(&buf)?;
+        Ok(message)
+    }
+}
+
+extern crate vsock;
+
+
+struct HelloFS {
+    syscall: Syscall,
+}
+
+impl HelloFS {
+    fn new(syscall: Syscall) -> Self {
+        HelloFS { syscall }
+    }
+}
 
 impl Filesystem for HelloFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
@@ -130,7 +168,35 @@ impl Filesystem for HelloFS {
         reply: ReplyData,
     ) {
         if ino == 2 {
-            reply.data(&HELLO_TXT_CONTENT.as_bytes()[offset as usize..]);
+            let file = File::new(2, self.syscall.clone());
+            if let Some(data) = file.read() {
+                reply.data(&data[offset as usize..]);
+            } else {
+                reply.error(ENOENT);
+            }
+        } else {
+            reply.error(ENOENT);
+        }
+    }
+
+    fn write(
+        &mut self,
+        _req: &Request,
+        ino: u64,
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _flags: i32,
+        _lock: Option<u64>,
+        reply: ReplyData,
+    ) {
+        if ino == 2 {
+            let file = File::new(2, self.syscall.clone());
+            if file.write(data.to_vec()) {
+                reply.ok();
+            } else {
+                reply.error(ENOENT);
+            }
         } else {
             reply.error(ENOENT);
         }
@@ -163,7 +229,7 @@ impl Filesystem for HelloFS {
         }
         reply.ok();
     }
-} 
+}
 
 fn main() {
     let matches = Command::new("hello")
@@ -197,29 +263,12 @@ fn main() {
     if matches.get_flag("allow-root") {
         options.push(MountOption::AllowRoot);
     }
-    fuser::mount2(HelloFS, mountpoint, &options).unwrap();
+
+    let sock = TcpStream::connect("localhost:12345").unwrap();
+    let syscall = Syscall::new(sock);
+    let filesystem = HelloFS::new(syscall);
+    fuser::mount2(filesystem, mountpoint, &options).unwrap();
 }
-/*
-impl Syscall {
-    fn new(sock: VsockStream) -> Self {
-        Syscall { sock }
-    }
-
-    fn _send<M: Message>(&mut self, obj: &M) -> Result<()> {
-        let obj_data = obj.write_to_bytes().unwrap();
-        self.sock.write_u32::<BigEndian>(obj_data.len() as u32)?;
-        self.sock.write_all(&obj_data)?;
-        Ok(())
-    }
-
-    fn _recv<M: Message>(&mut self, obj: &mut M) -> Result<()> {
-        let len = self.sock.read_u32::<BigEndian>()?;
-        let mut buffer = vec![0; len as usize];
-        self.sock.read_exact(&mut buffer)?;
-        obj.merge_from_bytes(&buffer)?;
-        Ok(())
-    }
-} */
 
 /* Rust already has third-party crate that allows you to talk to v-sock 
     Establish connection, serialize the object using code generated by protobuf, send serialized files (one communication)
