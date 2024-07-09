@@ -1,4 +1,4 @@
-// include!(concat!(env!("OUT_DIR"), "/snapfaas.syscalls.rs"));
+include!(concat!(env!("OUT_DIR"), "/snapfaas.syscalls.rs"));
 
 extern crate vsock;
 
