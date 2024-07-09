@@ -1,4 +1,4 @@
-// include!(concat!(env!("OUT_DIR"), "/snapfaas.syscalls.rs"));
+include!(concat!(env!("OUT_DIR"), "/snapfaas.syscalls.rs"));
 // include!(concat!(env!("OUT_DIR"), "/sched.messages.rs"));
 
 extern crate vsock;
@@ -125,9 +125,6 @@ impl Syscall {
         Ok(message)
     }
 }
-
-extern crate vsock;
-
 
 struct HelloFS {
     syscall: Syscall,
