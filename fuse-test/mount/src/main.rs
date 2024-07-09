@@ -60,9 +60,6 @@ struct File {
     syscall: Syscall,
 } */
 struct HelloFS;
-struct Syscall {
-    sock: VsockStream,
-}
 /*
 impl File {
     fn new(fd: i32, syscall: Syscall) -> Self {
