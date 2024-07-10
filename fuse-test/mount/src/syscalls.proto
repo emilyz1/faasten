@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package snapfaas.syscalls;
+// package snapfaas.syscalls;
 
 message Function {
   uint64 memory = 1;

@@ -103,7 +103,13 @@ impl HelloFS {
 }
 
 impl Filesystem for HelloFS {
-    fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
+    fn lookup(
+        &mut self, 
+         _req: &Request<'_>, 
+         parent: u64, 
+         name: &OsStr, 
+         reply: ReplyEntry
+        ) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
@@ -111,7 +117,11 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
+    fn getattr(
+        &mut self, 
+        _req: &Request<'_>, 
+        ino: u64, 
+        reply: ReplyAttr) {
         match ino {
             1 => reply.attr(&TTL, &HELLO_DIR_ATTR),
             2 => reply.attr(&TTL, &HELLO_TXT_ATTR),
@@ -121,18 +131,18 @@ impl Filesystem for HelloFS {
 
     fn read(
         &mut self,
-        _req: &Request,
+        _req: &Request<'_>,
         ino: u64,
-        _fh: u64,
+        fh: u64,
         offset: i64,
-        _size: u32,
-        _flags: i32,
-        _lock: Option<u64>,
+        size: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
         if ino == 2 {
-            let file = File::new(2, self.syscall.clone());
-            if let Some(data) = file.read() {
+            let file = File::new(2);
+            if let Some(data) = file.read(reply.data) {
                 reply.data(&data[offset as usize..]);
             } else {
                 reply.error(ENOENT);
@@ -144,19 +154,20 @@ impl Filesystem for HelloFS {
 
     fn write(
         &mut self,
-        _req: &Request,
+        _req: &Request<'_>,
         ino: u64,
-        _fh: u64,
+        fh: u64,
         offset: i64,
         data: &[u8],
-        _flags: i32,
-        _lock: Option<u64>,
-        reply: ReplyData,
+        write_flags: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
+        reply: ReplyWrite,
     ) {
         if ino == 2 {
             let file = File::new(2, self.syscall.clone());
             if file.write(data.to_vec()) {
-                reply.data(data);
+                reply.written(write_flags);
             } else {
                 reply.error(ENOENT);
             }
@@ -167,9 +178,9 @@ impl Filesystem for HelloFS {
 
     fn readdir(
         &mut self,
-        _req: &Request,
+        _req: &Request<'_>,
         ino: u64,
-        _fh: u64,
+        fh: u64,
         offset: i64,
         mut reply: ReplyDirectory,
     ) {

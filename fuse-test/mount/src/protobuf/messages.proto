@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package snapfaas.sched.messages;
+// package snapfaas.sched.messages;
 
 import "syscalls.proto";
 
