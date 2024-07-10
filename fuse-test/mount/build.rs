@@ -14,6 +14,6 @@ fn main() -> Result<()> {
     for path in paths {
         println!("{}", path.unwrap().path().display());
     }
-    prost_build::compile_protos(&["src/syscalls.proto", "src/protobuf/messages.proto"], &["src/"])?;
+    prost_build::compile_protos(&["src/syscalls.proto"], &["src/"])?;
     Ok(())
 }
