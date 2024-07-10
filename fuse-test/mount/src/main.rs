@@ -56,7 +56,7 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     blksize: 512,
 };
 
-
+/*
 struct File {
     fd: u64,
     vsock_stream: Option<VsockStream>,
@@ -90,7 +90,7 @@ impl File {
             Err(std::io::Error::new(std::io::ErrorKind::Other, "vsock stream not initialized"))
         }
     }
-}
+}*/
 
 struct HelloFS {
     syscall: Syscall,
@@ -141,12 +141,13 @@ impl Filesystem for HelloFS {
         reply: ReplyData,
     ) {
         if ino == 2 {
+            /*
             let file = File::new(2);
             if let Some(data) = file.read(reply.data) {
                 reply.data(&data[offset as usize..]);
             } else {
                 reply.error(ENOENT);
-            }
+            } */
         } else {
             reply.error(ENOENT);
         }
@@ -164,13 +165,13 @@ impl Filesystem for HelloFS {
         lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
-        if ino == 2 {
+        if ino == 2 { /*
             let file = File::new(2, self.syscall.clone());
             if file.write(data.to_vec()) {
                 reply.written(write_flags);
             } else {
                 reply.error(ENOENT);
-            }
+            } */
         } else {
             reply.error(ENOENT);
         }
