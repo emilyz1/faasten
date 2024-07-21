@@ -1,22 +1,19 @@
 include!(concat!(env!("OUT_DIR"), "/snapfaas.syscalls.rs"));
-// include!(concat!(env!("OUT_DIR"), "/sched.messages.rs"));
 
 extern crate vsock;
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use protobuf::Message;
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use vsock::VsockStream;
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
-    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry
+    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
+    Request,
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
+use std::io::{Error, Read, Write, Result};
 use std::time::{Duration, UNIX_EPOCH};
-
-//use syscall::{File, Syscall};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use protobuf::Message;
+use vsock::VsockStream;
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
@@ -24,7 +21,7 @@ const HELLO_DIR_ATTR: FileAttr = FileAttr {
     ino: 1,
     size: 0,
     blocks: 0,
-    atime: UNIX_EPOCH,
+    atime: UNIX_EPOCH, // 1970-01-01 00:00:00
     mtime: UNIX_EPOCH,
     ctime: UNIX_EPOCH,
     crtime: UNIX_EPOCH,
@@ -37,6 +34,8 @@ const HELLO_DIR_ATTR: FileAttr = FileAttr {
     flags: 0,
     blksize: 512,
 };
+
+const HELLO_TXT_CONTENT: &str = "Hello World!\n";
 
 const HELLO_TXT_ATTR: FileAttr = FileAttr {
     ino: 2,
@@ -55,61 +54,58 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
     blksize: 512,
 };
-
 /*
 struct File {
-    fd: u64,
-    vsock_stream: Option<VsockStream>,
-}
-
-impl File {
-    // establish vsock connection
-    pub fn new(fd: u64, cid: u64, port: u32) -> Self {
-        let vsock_addr = vsock::SockAddr::new(cid, port);
-        let vsock_stream = VsockStream::connect(vsock_addr).unwrap(); // Adjust error handling as needed
-        File {
-            fd,
-            vsock_stream: Some(vsock_stream),
-        }
-    }
-
-    pub fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        if let Some(ref mut stream) = self.vsock_stream {
-            stream.write_all(data)?;
-            Ok(data.len())
-        } else {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "vsock stream not initialized"))
-        }
-    }
-
-    pub fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if let Some(ref mut stream) = self.vsock_stream {
-            stream.read_exact(buf)?;
-            Ok(buf.len())
-        } else {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "vsock stream not initialized"))
-        }
-    }
-}*/
-
-struct HelloFS {
+    fd: i32,
     syscall: Syscall,
-}
-
-impl HelloFS {
-    fn new(syscall: Syscall) -> Self {
-        HelloFS { syscall }
+} */
+struct HelloFS;
+/*
+struct Syscall {
+    sock: VsockStream,
+} */
+/*
+impl File {
+    fn new(fd: i32, syscall: Syscall) -> Self {
+        File { fd, syscall }
     }
-}
+
+    fn read(&mut self) -> Result<Option<Vec<u8>>> {
+        let mut req = syscalls::Syscall::new();
+        let mut dent_read = syscalls::DentRead::new();
+        dent_read.set_fd(self.fd);
+        req.set_dentRead(dent_read);
+
+        self.syscall._send(&req)?;
+
+        let mut response = syscalls::DentResult::new();
+        self.syscall._recv(&mut response)?;
+
+        if response.get_success() {
+            Ok(Some(response.get_data().to_vec()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn write(&mut self, data: Vec<u8>) -> Result<bool> {
+        let mut req = syscalls::Syscall::new();
+        let mut dent_update = syscalls::DentUpdate::new();
+        dent_update.set_fd(self.fd);
+        dent_update.set_file(data);
+        req.set_dentUpdate(dent_update);
+
+        self.syscall._send(&req)?;
+
+        let mut response = syscalls::DentResult::new();
+        self.syscall._recv(&mut response)?;
+
+        Ok(response.get_success())
+    }
+} */
 
 impl Filesystem for HelloFS {
-    fn lookup(
-        &mut self, 
-         _req: &Request<'_>, 
-         parent: u64, 
-         name: &OsStr, 
-         reply: ReplyEntry
-        ) {
+    fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
@@ -117,11 +113,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(
-        &mut self, 
-        _req: &Request<'_>, 
-        ino: u64, 
-        reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
         match ino {
             1 => reply.attr(&TTL, &HELLO_DIR_ATTR),
             2 => reply.attr(&TTL, &HELLO_TXT_ATTR),
@@ -131,47 +123,17 @@ impl Filesystem for HelloFS {
 
     fn read(
         &mut self,
-        _req: &Request<'_>,
+        _req: &Request,
         ino: u64,
-        fh: u64,
+        _fh: u64,
         offset: i64,
-        size: u32,
-        flags: i32,
-        lock_owner: Option<u64>,
+        _size: u32,
+        _flags: i32,
+        _lock: Option<u64>,
         reply: ReplyData,
     ) {
         if ino == 2 {
-            /*
-            let file = File::new(2);
-            if let Some(data) = file.read(reply.data) {
-                reply.data(&data[offset as usize..]);
-            } else {
-                reply.error(ENOENT);
-            } */
-        } else {
-            reply.error(ENOENT);
-        }
-    }
-
-    fn write(
-        &mut self,
-        _req: &Request<'_>,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        data: &[u8],
-        write_flags: u32,
-        flags: i32,
-        lock_owner: Option<u64>,
-        reply: ReplyWrite,
-    ) {
-        if ino == 2 { /*
-            let file = File::new(2, self.syscall.clone());
-            if file.write(data.to_vec()) {
-                reply.written(write_flags);
-            } else {
-                reply.error(ENOENT);
-            } */
+            reply.data(&HELLO_TXT_CONTENT.as_bytes()[offset as usize..]);
         } else {
             reply.error(ENOENT);
         }
@@ -179,9 +141,9 @@ impl Filesystem for HelloFS {
 
     fn readdir(
         &mut self,
-        _req: &Request<'_>,
+        _req: &Request,
         ino: u64,
-        fh: u64,
+        _fh: u64,
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
@@ -202,9 +164,9 @@ impl Filesystem for HelloFS {
                 break;
             }
         }
-        reply.data(data);
+        reply.ok();
     }
-}
+} 
 
 fn main() {
     let matches = Command::new("hello")
@@ -238,12 +200,29 @@ fn main() {
     if matches.get_flag("allow-root") {
         options.push(MountOption::AllowRoot);
     }
-
-    let sock = TcpStream::connect("localhost:12345").unwrap();
-    let syscall = Syscall::new(sock);
-    let filesystem = HelloFS::new(syscall);
-    fuser::mount2(filesystem, mountpoint, &options).unwrap();
+    fuser::mount2(HelloFS, mountpoint, &options).unwrap();
 }
+/*
+impl Syscall {
+    fn new(sock: VsockStream) -> Self {
+        Syscall { sock }
+    }
+
+    fn _send<M: Message>(&mut self, obj: &M) -> Result<()> {
+        let obj_data = obj.write_to_bytes().unwrap();
+        self.sock.write_u32::<BigEndian>(obj_data.len() as u32)?;
+        self.sock.write_all(&obj_data)?;
+        Ok(())
+    }
+
+    fn _recv<M: Message>(&mut self, obj: &mut M) -> Result<()> {
+        let len = self.sock.read_u32::<BigEndian>()?;
+        let mut buffer = vec![0; len as usize];
+        self.sock.read_exact(&mut buffer)?;
+        obj.merge_from_bytes(&buffer)?;
+        Ok(())
+    }
+} */
 
 /* Rust already has third-party crate that allows you to talk to v-sock 
     Establish connection, serialize the object using code generated by protobuf, send serialized files (one communication)
@@ -268,3 +247,22 @@ fn main() {
     - build.rs: run what you're trying to do in cargo check, so you could try to call syscalls.proto
     - you will get file path to code generated by protobuf once you make. make sure you include the filepath (refer to syscalls.rs, which is a wrapper)
      */
+
+     // 7/9
+    // implement vsock connection here
+    // create a syscall object, defined in the code generated by protobuf. serialize syscall object and pass it through the vsock connection
+    // serialize means converting object into bytes array. protobuf will automatically implement traits
+    // go to target directory to find protobuf code in cli ()
+    /*
+    the way you could do it is the fuse filesystem is a trait for the filesystem struct (every object will go through the fuse filesystem trait)
+    every time you call it you interact with the filesystem structure you created
+    because you always have to go through the filesystem interface, you always need the vsock device to talk to the virtual network device which is why you put the vsock connection in the filesystem
+    snapfaas.syscalls.rs: bare rust definition of the remote messages
+    when you try to make a syscall, it's not a function call: you ahve to create a structure Syscall and pass the syscall to the vsock device. trasmitting from your program to faasten. faasten will get the syscall structure
+    from the vsock device and interpret the bytes as a remote message and will realize it's a syscall
+    when you want to make a syscall, protobuf already gives you a definition of the syscall, generated rust code is rust enum of syscall. when we make syscall we reuse rust definition and make rust structure. we pass rust syscall structure into syscall.
+    after you talk to vsock you get back a response from the protobuf in the rust structure, need to convert it into a valid response of the fuser filesystem
+    do a direct translation, try to mimic a normal filesystem
+    */
+
+     
