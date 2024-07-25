@@ -1,4 +1,4 @@
-include!(concat!(env!("OUT_DIR"), "/_.rs"));
+include!(concat!(env!("OUT_DIR"), "/fuse-test.syscalls.rs"));
 
 extern crate vsock;
 

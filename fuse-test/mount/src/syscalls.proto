@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// package snapfaas.syscalls;
+package fuse-test.syscalls;
 
 message Function {
   uint64 memory = 1;
