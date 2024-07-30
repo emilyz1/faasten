@@ -1,11 +1,10 @@
-include!(concat!(env!("OUT_DIR"), "/fuse-test.syscalls.rs"));
+include!(concat!(env!("OUT_DIR"), "/_.rs"));
 
 extern crate vsock;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
-    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
-    Request,
+    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
@@ -56,11 +55,33 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     blksize: 512,
 };
 
-struct Syscall {
+trait SyscallExt {
+    fn new_feature(&self);
+}
+
+// Implement the trait for Syscall
+impl SyscallExt for Syscall {
+    fn new_feature(&self) {
+        match &self.syscall {
+            Some(syscall::Syscall::Response(response)) => {
+                println!("New feature for Response: {:?}", response);
+            }
+            Some(syscall::Syscall::BuckleParse(buckle)) => {
+                println!("New feature for BuckleParse: {}", buckle);
+            }
+            // Add handling for other variants as needed
+            _ => {
+                println!("New feature for other syscalls");
+            }
+        }
+    }
+}
+
+struct SyscallClient {
     sock: VsockStream,
 }
 
-impl Syscall {
+impl SyscallClient for Syscall {
     fn new(sock: VsockStream) -> Self {
         Self { sock }
     }
@@ -86,7 +107,7 @@ impl Syscall {
         Ok(obj)
     }
 }
-
+/*
 struct DirEntry {
     fd: u64,
     syscall: Syscall,
@@ -128,7 +149,7 @@ impl File {
         let response: DentResult = self.syscall._recv()?;
         Ok(response.success)
     }
-}
+} */
 
 struct HelloFS {
     cid: u32,
