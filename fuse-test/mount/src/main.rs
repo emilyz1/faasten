@@ -153,12 +153,12 @@ impl File {
 } */
 
 trait Vsock {
-    fn new_connection(&self, cid: u32, port: u32) -> Result<Self, std::error::Error>;
+    fn new_connection(&self, cid: u32, port: u32) -> Result<Self>;
 }
 
 // Implement the trait for Syscall
 impl Vsock for HelloFS {
-    fn new_connection(&self, cid: u32, port: u32) -> Result<Self, std::error::Error> {
+    fn new_connection(&self, cid: u32, port: u32) -> Result<Self> {
         // connect vsock stream
         let stream = VsockStream::connect_with_cid_port(cid, port);
         Ok(Self { stream })
