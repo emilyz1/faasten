@@ -4,7 +4,7 @@ extern crate vsock;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use fuser::{
-    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry
+    FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
@@ -55,28 +55,6 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
     blksize: 512,
 };
-
-trait SyscallExt {
-    fn new_feature(&self);
-}
-
-// Implement the trait for Syscall
-impl SyscallExt for Syscall {
-    fn new_feature(&self) {
-        match &self.syscall {
-            Some(syscall::Syscall::Response(response)) => {
-                println!("New feature for Response: {:?}", response);
-            }
-            Some(syscall::Syscall::BuckleParse(buckle)) => {
-                println!("New feature for BuckleParse: {}", buckle);
-            }
-            // Add handling for other variants as needed
-            _ => {
-                println!("New feature for other syscalls");
-            }
-        }
-    }
-}
 
 struct SyscallClient {
     sock: VsockStream,
@@ -152,11 +130,11 @@ impl File {
     }
 } */
 
+// Implement vsock connection
 trait Vsock {
     fn new_connection(&self, cid: u32, port: u32) -> Result<Self>;
 }
 
-// Implement the trait for Syscall
 impl Vsock for HelloFS {
     fn new_connection(&self, cid: u32, port: u32) -> Result<Self> {
         // connect vsock stream
@@ -165,18 +143,9 @@ impl Vsock for HelloFS {
     }
 }
 
-struct HelloFS; /* {
-    cid: u32,
-    port: u32,
-} */
+struct HelloFS;
 
 impl Filesystem for HelloFS {
-    /*fn new(cid: u32, port: u32) -> Result<Self, std::io::Error> {
-        // connect vsock stream
-        let stream = VsockStream::connect_with_cid_port(cid, port);
-        Ok(Self { stream })
-    } */
-
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
