@@ -11,7 +11,7 @@ use std::ffi::OsStr;
 use std::io::{Error, Result};
 use std::time::{Duration, UNIX_EPOCH};
 use byteorder::{BigEndian};
-use protobuf::Message;
+use prost::Message;
 use bytes::{BytesMut, BufMut};
 use vsock::{VsockStream, VsockListener};
 
