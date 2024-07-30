@@ -146,7 +146,7 @@ impl Vsock for HelloFS {
 struct HelloFS;
 
 impl Filesystem for HelloFS {
-    fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
+    fn lookup(&mut self, _req: &fuser::Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
@@ -154,7 +154,7 @@ impl Filesystem for HelloFS {
         }
     }
 
-    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &fuser::Request, ino: u64, reply: ReplyAttr) {
         match ino {
             1 => reply.attr(&TTL, &HELLO_DIR_ATTR),
             2 => reply.attr(&TTL, &HELLO_TXT_ATTR),
@@ -164,7 +164,7 @@ impl Filesystem for HelloFS {
 
     fn read(
         &mut self,
-        _req: &Request,
+        _req: &fuser::Request,
         ino: u64,
         _fh: u64,
         offset: i64,
@@ -182,7 +182,7 @@ impl Filesystem for HelloFS {
 
     fn readdir(
         &mut self,
-        _req: &Request,
+        _req: &fuser::Request,
         ino: u64,
         _fh: u64,
         offset: i64,
