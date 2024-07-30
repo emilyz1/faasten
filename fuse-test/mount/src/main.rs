@@ -10,7 +10,6 @@ use libc::ENOENT;
 use std::ffi::OsStr;
 use std::io::{Error, Result};
 use std::time::{Duration, UNIX_EPOCH};
-use std::error::Error;
 use byteorder::{BigEndian};
 use protobuf::Message;
 use bytes::{BytesMut, BufMut};
@@ -60,30 +59,37 @@ struct SyscallClient {
     sock: VsockStream,
 }
 
-impl SyscallClient for Syscall {
+impl SyscallClient {
     fn new(sock: VsockStream) -> Self {
         Self { sock }
     }
 
-    fn _send<T: Message>(&mut self, obj: &T) -> Result<(), Box<dyn Error>> {
-        let mut buf = BytesMut::with_capacity(obj.encoded_len());
-        obj.encode(&mut buf)?;
-
-        let len = buf.len() as u32;
-        self.sock.write_u32::<BigEndian>(len)?;
-        self.sock.write_all(&buf)?;
-
-        Ok(())
+    fn _send(&mut self, obj: &impl Message) {
+        let obj_data = obj.encode_to_vec();
+        self.sock.write_u32::<BigEndian>(obj_data.len() as u32).unwrap();
+        self.sock.write_all(&obj_data).unwrap();
     }
 
-    fn _recv<T: Message + Default>(&mut self) -> Result<T, Box<dyn Error>> {
-        let len = self.sock.read_u32::<BigEndian>()? as usize;
+    fn _recv<T: Message + Default>(&mut self) -> T {
+        let size = self.sock.read_u32::<BigEndian>().unwrap() as usize;
+        let data = recvall(&self.sock, size);
+        let mut obj = T::default();
+        obj.merge(data.as_ref()).unwrap();
+        obj
 
-        let mut buf = vec![0u8; len];
-        self.sock.read_exact(&mut buf)?;
-        let obj = T::decode(&buf[..])?;
+    /* 
+    def _send(self, obj):
+        objData = obj.SerializeToString()
+        self.sock.sendall(struct.pack(">I", len(objData)))
+        self.sock.sendall(objData)
 
-        Ok(obj)
+    def _recv(self, obj):
+        data = self.sock.recv(4, socket.MSG_WAITALL)
+        res = struct.unpack(">I", data)
+        objData = recvall(self.sock, res[0])
+
+        obj.ParseFromString(objData)
+        return obj*/
     }
 }
 /*
