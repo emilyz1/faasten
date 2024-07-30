@@ -10,6 +10,7 @@ use libc::ENOENT;
 use std::ffi::OsStr;
 use std::io::{Error, Result};
 use std::time::{Duration, UNIX_EPOCH};
+use std::error::Error;
 use byteorder::{BigEndian};
 use protobuf::Message;
 use bytes::{BytesMut, BufMut};
@@ -151,17 +152,30 @@ impl File {
     }
 } */
 
-struct HelloFS {
-    cid: u32,
-    port: u32,
+trait Vsock {
+    fn new_connection(&self, cid: u32, port: u32) -> Result<Self, std::error::Error>;
 }
 
-impl Filesystem for HelloFS {
-    fn new(cid: u32, port: u32) -> Result<Self, std::io::Error> {
+// Implement the trait for Syscall
+impl Vsock for HelloFS {
+    fn new_connection(&self, cid: u32, port: u32) -> Result<Self, std::error::Error> {
         // connect vsock stream
         let stream = VsockStream::connect_with_cid_port(cid, port);
         Ok(Self { stream })
     }
+}
+
+struct HelloFS; /* {
+    cid: u32,
+    port: u32,
+} */
+
+impl Filesystem for HelloFS {
+    /*fn new(cid: u32, port: u32) -> Result<Self, std::io::Error> {
+        // connect vsock stream
+        let stream = VsockStream::connect_with_cid_port(cid, port);
+        Ok(Self { stream })
+    } */
 
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
