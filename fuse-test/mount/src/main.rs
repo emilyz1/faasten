@@ -64,7 +64,7 @@ impl SyscallClient {
         Self { sock }
     }
 
-    fn _send(&mut self, obj: &mut impl BufMut) -> Result<()> {
+    fn _send(&mut self, obj: &Syscall) -> Result<()> {
         let obj_data = encode(obj)?;
         // why isn't this working bruh
         let length = obj_data.len() as u32;
@@ -73,7 +73,7 @@ impl SyscallClient {
         Ok(())
     }
     // ????
-    fn _recv(&mut self, obj: &mut impl BufMut) -> &mut impl BufMut {
+    fn _recv(&mut self, obj: &Syscall) -> Syscall {
         let size = self.sock.read_u32::<BigEndian>().unwrap() as usize;
         let data = recvall(&self.sock, size);
         let mut obj = T::default();
@@ -112,12 +112,13 @@ impl File {
     }
 
     fn read(&mut self) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+        // combine syscall definitions
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentRead(self.fd)),
         };
         self.syscall._send(&req)?;
 
-        let response: DentResult = self.syscall._recv(syscall::DentResult())?;
+        let response: DentResult = self.syscall._recv(syscall::DentResult());
         if response.success {
             Ok(response.data)
         } else {
@@ -125,17 +126,13 @@ impl File {
         }
     }
 
-    fn write(&mut self, data: Vec<u8>) -> Result<bool, Box<dyn Error>> {
-        let update = DentUpdate {
-            fd: self.fd,
-            kind: Some(dent_update::Kind::File(data)),
-        };
+    fn write(&mut self, data: Vec<u8>) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         let req = Syscall {
-            syscall: Some(syscall::Syscall::DentUpdate(update)),
+            syscall: Some(syscall::Syscall::DentUpdate(syscall::DentUpdate(fd=self.fd, file=data))),
         };
         self.syscall._send(&req)?;
 
-        let response: DentResult = self.syscall._recv()?;
+        let response: DentResult = self.syscall._recv(syscall::DentResult());
         Ok(response.success)
     }
 
@@ -160,11 +157,11 @@ impl File {
 
 // Implement vsock connection
 trait Vsock {
-    fn new_connection(&self, cid: u32, port: u32) -> Self;
+    fn new_connection(&self, cid: u32, port: u32) -> HelloFS;
 }
 
 impl Vsock for HelloFS {
-    fn new_connection(&self, cid: u32, port: u32) -> Self {
+    fn new_connection(&self, cid: u32, port: u32) -> HelloFS {
         // connect vsock stream... how should i connect it to the filesystem
         let stream = VsockStream::connect_with_cid_port(cid, port);
     }
