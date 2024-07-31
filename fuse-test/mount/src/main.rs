@@ -65,17 +65,15 @@ impl SyscallClient {
     }
 
     fn _send(&mut self, obj: &Syscall) -> Result<()> {
-        let obj_data = encode(obj)?;
-        // why isn't this working bruh
-        let length = obj_data.len() as u32;
+        let obj_data = obj.write_to_bytes()?;
+        let length = obj_data.len() as u32; // should have length
         self.sock.write_all(&length.to_be_bytes())?;
         self.sock.write_all(&obj_data)?;
         Ok(())
     }
     // ????
     fn _recv(&mut self, obj: &Syscall) -> Syscall {
-        let size = self.sock.read_u32::<BigEndian>().unwrap() as usize;
-        let data = recvall(&self.sock, size);
+        let size = self.sock.read::<BigEndian>().unwrap() as usize;
         let mut obj = T::default();
         obj.merge(data.as_ref()).unwrap();
         return obj;
@@ -111,14 +109,14 @@ impl File {
         File { fd, syscall }
     }
 
-    fn read(&mut self) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn read(&mut self) -> Result<Option<Vec<u8>> {
         // combine syscall definitions
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentRead(self.fd)),
         };
         self.syscall._send(&req)?;
 
-        let response: DentResult = self.syscall._recv(syscall::DentResult());
+        let response: DentResult = self.syscall._recv(DentResult());
         if response.success {
             Ok(response.data)
         } else {
@@ -126,13 +124,13 @@ impl File {
         }
     }
 
-    fn write(&mut self, data: Vec<u8>) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn write(&mut self, data: Vec<u8>) -> bool {
         let req = Syscall {
-            syscall: Some(syscall::Syscall::DentUpdate(syscall::DentUpdate(fd=self.fd, file=data))),
+            syscall: Some(syscall::Syscall::DentUpdate(syscall::DentUpdate(fd=self.fd, file=self.data))),
         };
         self.syscall._send(&req)?;
 
-        let response: DentResult = self.syscall._recv(syscall::DentResult());
+        let response: DentResult = self.syscall._recv(DentResult());
         Ok(response.success)
     }
 
