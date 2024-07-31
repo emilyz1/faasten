@@ -13,7 +13,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use byteorder::{BigEndian};
 use prost::Message;
 use bytes::{BytesMut, BufMut};
-use vsock::{VsockStream, VsockListener};
+use vsock::{VsockStream};
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
@@ -64,11 +64,11 @@ impl SyscallClient {
         Self { sock }
     }
 
-    fn _send(&mut self, obj: &impl Message) -> io::Result<()> {
-        let obj_data = obj.encode()?;
+    fn _send(&mut self, obj: &mut impl BufMut) -> Result<()> {
+        let obj_data = encode(obj)?;
         let length = obj_data.len() as u32;
-        self.sock.write_all(&length.to_be_bytes())?;
-        self.sock.write_all(&obj_data)?;
+        vsock::VsockStream::write_all(&length.to_be_bytes())?;
+        vsock::VsockStream::write_all(&obj_data)?;
         Ok(())
     }
 
