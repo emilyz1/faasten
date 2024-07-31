@@ -66,18 +66,19 @@ impl SyscallClient {
 
     fn _send(&mut self, obj: &mut impl BufMut) -> Result<()> {
         let obj_data = encode(obj)?;
+        // why isn't this working bruh
         let length = obj_data.len() as u32;
-        vsock::VsockStream::write_all(&length.to_be_bytes())?;
-        vsock::VsockStream::write_all(&obj_data)?;
+        self.sock.write_all(&length.to_be_bytes())?;
+        self.sock.write_all(&obj_data)?;
         Ok(())
     }
-
-    fn _recv<T: Message + Default>(&mut self) -> T {
+    // ????
+    fn _recv(&mut self, obj: &mut impl BufMut) -> &mut impl BufMut {
         let size = self.sock.read_u32::<BigEndian>().unwrap() as usize;
         let data = recvall(&self.sock, size);
         let mut obj = T::default();
         obj.merge(data.as_ref()).unwrap();
-        obj
+        return obj;
 
     /* 
     def _send(self, obj):
@@ -94,7 +95,7 @@ impl SyscallClient {
         return obj*/
     }
 }
-/*
+
 struct DirEntry {
     fd: u64,
     syscall: SyscallClient,
@@ -136,7 +137,7 @@ impl File {
         let response: DentResult = self.syscall._recv()?;
         Ok(response.success)
     }
-} */
+}
 
 // Implement vsock connection
 trait Vsock {
