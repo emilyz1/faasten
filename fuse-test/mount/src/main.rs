@@ -11,7 +11,7 @@ use std::ffi::OsStr;
 use std::io::{Error, Result};
 use std::time::{Duration, UNIX_EPOCH};
 use byteorder::{BigEndian};
-use protobuf::Message;
+use prost::Message;
 use bytes::{BytesMut, BufMut};
 use vsock::{VsockStream};
 
@@ -65,7 +65,7 @@ impl SyscallClient {
     }
 
     fn _send(&mut self, obj: &Syscall) -> Result<()> {
-        let obj_data = obj.write_to_bytes()?;
+        let obj_data = obj.encode_to_vec()?;
         let length = obj_data.len() as u32; // should have length
         self.sock.write_all(&length.to_be_bytes())?;
         self.sock.write_all(&obj_data)?;
