@@ -102,12 +102,13 @@ struct DirEntry {
 }
 
 struct File {
-    dirEntry: DirEntry,
+    fd: u64,
+    syscall: SyscallClient,
 }
 
 impl File {
     fn new(dirEntry: DirEntry) -> Self {
-        File { dirEntry }
+        File { fd, syscall }
     }
 
     fn read(&mut self) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
@@ -116,7 +117,7 @@ impl File {
         };
         self.syscall._send(&req)?;
 
-        let response: DentResult = self.syscall._recv()?;
+        let response: DentResult = self.syscall._recv(syscall::DentResult())?;
         if response.success {
             Ok(response.data)
         } else {
@@ -137,6 +138,24 @@ impl File {
         let response: DentResult = self.syscall._recv()?;
         Ok(response.success)
     }
+
+    /* 
+    class File(DirEntry):
+    def read(self):
+        req = syscalls_pb2.Syscall(dentRead=self.fd)
+        self.syscall._send(req)
+        response = self.syscall._recv(syscalls_pb2.DentResult())
+        if response.success:
+            return response.data
+        else:
+            return None
+
+    def write(self, data):
+        req = syscalls_pb2.Syscall(dentUpdate=syscalls_pb2.DentUpdate(fd=self.fd, file=data))
+        self.syscall._send(req)
+        response = self.syscall._recv(syscalls_pb2.DentResult())
+        return response.success
+        */
 }
 
 // Implement vsock connection
@@ -146,9 +165,8 @@ trait Vsock {
 
 impl Vsock for HelloFS {
     fn new_connection(&self, cid: u32, port: u32) -> Self {
-        // connect vsock stream
+        // connect vsock stream... how should i connect it to the filesystem
         let stream = VsockStream::connect_with_cid_port(cid, port);
-        Self { stream }
     }
 }
 
