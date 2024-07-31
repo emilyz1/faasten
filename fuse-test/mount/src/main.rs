@@ -64,10 +64,12 @@ impl SyscallClient {
         Self { sock }
     }
 
-    fn _send(&mut self, obj: &impl Message) {
-        let obj_data = obj.encode_to_vec();
-        self.sock.write_u32::<BigEndian>(obj_data.len() as u32).unwrap();
-        self.sock.write_all(&obj_data).unwrap();
+    fn _send(&mut self, obj: &impl Message) -> io::Result<()> {
+        let obj_data = obj.encode()?;
+        let length = obj_data.len() as u32;
+        self.sock.write_all(&length.to_be_bytes())?;
+        self.sock.write_all(&obj_data)?;
+        Ok(())
     }
 
     fn _recv<T: Message + Default>(&mut self) -> T {
@@ -95,7 +97,7 @@ impl SyscallClient {
 /*
 struct DirEntry {
     fd: u64,
-    syscall: Syscall,
+    syscall: SyscallClient,
 }
 
 struct File {
@@ -138,14 +140,14 @@ impl File {
 
 // Implement vsock connection
 trait Vsock {
-    fn new_connection(&self, cid: u32, port: u32) -> Result<Self>;
+    fn new_connection(&self, cid: u32, port: u32) -> Self;
 }
 
 impl Vsock for HelloFS {
-    fn new_connection(&self, cid: u32, port: u32) -> Result<Self> {
+    fn new_connection(&self, cid: u32, port: u32) -> Self {
         // connect vsock stream
         let stream = VsockStream::connect_with_cid_port(cid, port);
-        Ok(Self { stream })
+        Self { stream }
     }
 }
 
