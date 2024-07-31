@@ -85,7 +85,7 @@ impl SyscallClient {
         self.sock.sendall(objData)
 
     def _recv(self, obj):
-        data = self.sock.recv(4, socket.MSG_WAITALL)
+        data = self.sock.recv(4, socket.MSG_WAITALL) receives first four bytes/length, wait
         res = struct.unpack(">I", data)
         objData = recvall(self.sock, res[0])
 
@@ -126,7 +126,12 @@ impl File {
 
     fn write(&mut self, data: Vec<u8>) -> bool {
         let req = Syscall {
-            syscall: Some(syscall::Syscall::DentUpdate(syscall::DentUpdate(fd=self.fd, file=self.data))),
+            syscall: Some(syscall::Syscall::DentUpdate(
+                syscall::DentUpdate {
+                    fd: self.fd,
+                    kind: Some(dent_update::Kind::File(data)),
+                }
+            )),
         };
         self.syscall._send(&req)?;
 
@@ -136,21 +141,21 @@ impl File {
 
     /* 
     class File(DirEntry):
-    def read(self):
-        req = syscalls_pb2.Syscall(dentRead=self.fd)
-        self.syscall._send(req)
-        response = self.syscall._recv(syscalls_pb2.DentResult())
-        if response.success:
-            return response.data
-        else:
-            return None
+        def read(self):
+            req = syscalls_pb2.Syscall(dentRead=self.fd)
+            self.syscall._send(req)
+            response = self.syscall._recv(syscalls_pb2.DentResult())
+            if response.success:
+                return response.data
+            else:
+                return None
 
-    def write(self, data):
-        req = syscalls_pb2.Syscall(dentUpdate=syscalls_pb2.DentUpdate(fd=self.fd, file=data))
-        self.syscall._send(req)
-        response = self.syscall._recv(syscalls_pb2.DentResult())
-        return response.success
-        */
+        def write(self, data):
+            req = syscalls_pb2.Syscall(dentUpdate=syscalls_pb2.DentUpdate(fd=self.fd, file=data))
+            self.syscall._send(req)
+            response = self.syscall._recv(syscalls_pb2.DentResult())
+            return response.success
+    */
 }
 
 // Implement vsock connection
