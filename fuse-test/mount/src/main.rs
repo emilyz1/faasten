@@ -8,7 +8,7 @@ use fuser::{
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
-use std::io::{Error, Result};
+use std::io::{Error, Result, Write};
 use std::time::{Duration, UNIX_EPOCH};
 use byteorder::{BigEndian};
 use prost::Message;
@@ -65,7 +65,7 @@ impl SyscallClient {
     }
 
     fn _send(&mut self, obj: &Syscall) -> Result<()> {
-        let obj_data = obj.encode_to_vec()?;
+        let obj_data = obj.encode_to_vec();
         let length = obj_data.len() as u32; // should have length
         self.sock.write_all(&length.to_be_bytes())?;
         self.sock.write_all(&obj_data)?;
