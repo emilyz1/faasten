@@ -8,7 +8,7 @@ use fuser::{
 };
 use libc::ENOENT;
 use std::ffi::OsStr;
-use std::io::{Error, Result, Write};
+use std::io::{Error, Result, Read, Write};
 use std::time::{Duration, UNIX_EPOCH};
 use byteorder::{BigEndian};
 use prost::Message;
@@ -66,7 +66,7 @@ struct SyscallClient {
 impl SyscallClient {
     fn new(cid: u32, port: u32) -> Self {
         let sock = VsockStream::connect_with_cid_port(cid, port);
-        Self { cid, port }
+        Self { sock }
     }
 
     fn _send(&mut self, obj: &Syscall) -> Result<()> {
@@ -162,7 +162,7 @@ impl File {
 
 struct HelloFS {
     client: SyscallClient // otherwise make it global variable
-};
+}
 
 // use syscall client to bridge user parameters (e.g. list directory at path a/b -> create syscall request -> get Response from syscall client -> interpret and port to fuser) and faasten system
 impl Filesystem for HelloFS {
