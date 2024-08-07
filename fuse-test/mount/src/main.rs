@@ -58,7 +58,7 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
 // SyscallClient will take the wrap, dewrap the wrapper or wrap the raw protobuf message and send out
 // create vsock connection here
 struct SyscallClient {
-    sock: Result<VsockStream>,
+    sock: VsockStream,
 }
 
 impl SyscallClient {
@@ -167,7 +167,7 @@ struct FacetedDirectory {
 }
 
 impl FacetedDirectory {
-    fn ls() -> VsockStream {
+    fn ls(&mut self) -> VsockStream {
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentLsFaceted(
                 syscall::DentLsFaceted {
