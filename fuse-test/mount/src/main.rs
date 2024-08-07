@@ -63,7 +63,8 @@ struct SyscallClient {
 
 impl SyscallClient {
     fn new(cid: u32, port: u32) -> Self {
-        let sock = VsockStream::connect_with_cid_port(cid, port);
+        let sock = VsockStream::connect_with_cid_port(cid, port)
+            .expect("Failed to establish vsock connection");
         Self { sock }
     }
 
@@ -118,9 +119,9 @@ impl File {
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentRead(entry.fd)),
         };
-        self.client._send(&req)?;
+        self.entry.client._send(&req)?;
 
-        let response: DentResult = self.client._recv(DentResult());
+        let response: DentResult = self.entry.client._recv(DentResult());
         if response.success {
             Ok(response.data)
         } else {
@@ -137,9 +138,9 @@ impl File {
                 }
             )),
         };
-        self.client._send(&req)?;
+        self.entry.client._send(&req)?;
 
-        let response: DentResult = self.client._recv(DentResult());
+        let response: DentResult = self.entry.client._recv(DentResult());
         Ok(response.success)
     }
 
@@ -175,8 +176,8 @@ impl FacetedDirectory {
                 }
             )),
         };
-        self.client._send(&req)?;
-        let res: DentLsFacetedResult = self.client._recv(DentLsFacetedResult());
+        self.entry.client._send(&req)?;
+        let res: DentLsFacetedResult = self.entry.client._recv(DentLsFacetedResult());
         if res != None {
             return None;
         }
@@ -196,6 +197,37 @@ class FacetedDirectory(DirEntry):
         else:
             return None*/
 
+struct BlobEntry {
+    entry: DirEntry,
+}
+
+impl BlobEntry {
+    fn get(&mut self) {
+        let req = Syscall {
+            syscall: Some(syscall::Syscall::DentGetBlob(entry.fd)),
+        };
+        self.entry.client._send(&req);
+        let response = self.entry.client._recv(BlobResult());
+        if response.success {
+            // yield Blob(response.fd, response.len, self.syscall)
+        }
+        else {
+            // raise Exception("No such blob")
+        }
+    }
+}
+
+/* 
+class BlobEntry(DirEntry):
+    @contextmanager
+    def get(self):
+        req = syscalls_pb2.Syscall(dentGetBlob=self.fd)
+        self.syscall._send(req)
+        response = self.syscall._recv(syscalls_pb2.BlobResult())
+        if response.success:
+            
+        else:
+            raise Exception("No such blob")*/
 struct HelloFS {
     client: SyscallClient // otherwise make it global variable
 }
