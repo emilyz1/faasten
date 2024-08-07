@@ -60,13 +60,12 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
 // SyscallClient will take the wrap, dewrap the wrapper or wrap the raw protobuf message and send out
 // create vsock connection here
 struct SyscallClient {
-    cid: u32,
-    port: u32,
+    sock: VsockStream,
 }
 
 impl SyscallClient {
     fn new(cid: u32, port: u32) -> Self {
-        let sock = connect_with_cid_port(cid, port);
+        let sock = VsockStream::connect_with_cid_port(cid, port);
         Self { cid, port }
     }
 
@@ -78,12 +77,12 @@ impl SyscallClient {
         Ok(())
     }
 
-    fn _recv(&mut self, obj: &Syscall) -> Syscall {
+    fn _recv(&mut self, obj: &Syscall) -> &Syscall {
         let mut buffer = [0; 10];
         let data = self.sock.read_exact(&mut buffer);
         let res = &data.to_be_bytes():
         let obj_data = self.sock.read_to_end(res[0]);
-        obj.decode(obj_data);
+        Syscall::decode(obj_data);
         return obj;
 
     /* 
@@ -102,19 +101,14 @@ impl SyscallClient {
     }
 }
 
-struct DirEntry {
-    fd: u64,
-    syscall: SyscallClient,
-}
-
 struct File {
     fd: u64,
-    syscall: SyscallClient,
+    client: SyscallClient,
 }
 
 impl File {
-    fn new(dirEntry: DirEntry) -> Self {
-        File { fd, syscall }
+    fn new(fd: u64, client: SyscallClient) -> Self {
+        File { fd, client }
     }
 
     fn read(&mut self) -> Result<Option<Vec<u8>> {
