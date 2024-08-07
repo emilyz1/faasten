@@ -114,7 +114,7 @@ impl File {
         File { entry }
     }
 
-    fn read(&mut self) -> Result<Option<Vec<u8>> {
+    fn read(&mut self) -> Result<Option<Vec<u8>>> {
         // combine syscall definitions
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentRead(entry.fd)),
@@ -162,17 +162,17 @@ impl File {
             return response.success
     */
 }
-
+/*
 struct FacetedDirectory {
     entry: DirEntry,
 }
 
 impl FacetedDirectory {
-    fn ls(&mut self) -> VsockStream {
+    fn ls(&mut self) -> Result<> {
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentLsFaceted(
-                syscall::DentLsFaceted {
-                    fd: entry.fd,
+                syscall::Syscall::DentLsFaceted {
+                    fd: self.entry.fd,
                 }
             )),
         };
@@ -185,7 +185,7 @@ impl FacetedDirectory {
             return None;
         }
     }
-}
+} */
 /* 
 class FacetedDirectory(DirEntry):
     def ls(self):
@@ -196,7 +196,7 @@ class FacetedDirectory(DirEntry):
             return list(map(_Printer()._MessageToJsonObject, res.facets))
         else:
             return None*/
-
+/*
 struct BlobEntry {
     entry: DirEntry,
 }
@@ -204,7 +204,7 @@ struct BlobEntry {
 impl BlobEntry {
     fn get(&mut self) {
         let req = Syscall {
-            syscall: Some(syscall::Syscall::DentGetBlob(entry.fd)),
+            syscall: Some(syscall::Syscall::DentGetBlob(self.entry.fd)),
         };
         self.entry.client._send(&req);
         let response = self.entry.client._recv(BlobResult());
@@ -215,7 +215,7 @@ impl BlobEntry {
             // raise Exception("No such blob")
         }
     }
-}
+} */
 
 /* 
 class BlobEntry(DirEntry):
