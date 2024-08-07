@@ -55,13 +55,19 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     blksize: 512,
 };
 
+// interface to talk to vsock device
+// create wrapper for protobuf messages
+// SyscallClient will take the wrap, dewrap the wrapper or wrap the raw protobuf message and send out
+// create vsock connection here
 struct SyscallClient {
-    sock: VsockStream,
+    cid: u32,
+    port: u32,
 }
 
 impl SyscallClient {
-    fn new(sock: VsockStream) -> Self {
-        Self { sock }
+    fn new(cid: u32, port: u32) -> Self {
+        let sock = connect_with_cid_port(cid, port);
+        Self { cid, port }
     }
 
     fn _send(&mut self, obj: &Syscall) -> Result<()> {
@@ -71,11 +77,13 @@ impl SyscallClient {
         self.sock.write_all(&obj_data)?;
         Ok(())
     }
-    // ????
+
     fn _recv(&mut self, obj: &Syscall) -> Syscall {
-        let size = self.sock.read::<BigEndian>().unwrap() as usize;
-        let mut obj = T::default();
-        obj.merge(data.as_ref()).unwrap();
+        let mut buffer = [0; 10];
+        let data = self.sock.read_exact(&mut buffer);
+        let res = &data.to_be_bytes():
+        let obj_data = self.sock.read_to_end(res[0]);
+        obj.decode(obj_data);
         return obj;
 
     /* 
@@ -158,20 +166,11 @@ impl File {
     */
 }
 
-// Implement vsock connection
-trait Vsock {
-    fn new_connection(&self, cid: u32, port: u32) -> HelloFS;
-}
+struct HelloFS {
+    client: SyscallClient // otherwise make it global variable
+};
 
-impl Vsock for HelloFS {
-    fn new_connection(&self, cid: u32, port: u32) -> HelloFS {
-        // connect vsock stream... how should i connect it to the filesystem
-        let stream = VsockStream::connect_with_cid_port(cid, port);
-    }
-}
-
-struct HelloFS;
-
+// use syscall client to bridge user parameters (e.g. list directory at path a/b -> create syscall request -> get Response from syscall client -> interpret and port to fuser) and faasten system
 impl Filesystem for HelloFS {
     fn lookup(&mut self, _req: &fuser::Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
