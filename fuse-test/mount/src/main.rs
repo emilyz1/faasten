@@ -10,9 +10,7 @@ use libc::ENOENT;
 use std::ffi::OsStr;
 use std::io::{Error, Result, Read, Write};
 use std::time::{Duration, UNIX_EPOCH};
-use byteorder::{BigEndian};
 use prost::Message;
-use bytes::{BytesMut, BufMut};
 use vsock::{VsockStream};
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
@@ -60,7 +58,7 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
 // SyscallClient will take the wrap, dewrap the wrapper or wrap the raw protobuf message and send out
 // create vsock connection here
 struct SyscallClient {
-    sock: VsockStream,
+    sock: Result<VsockStream>,
 }
 
 impl SyscallClient {
@@ -80,7 +78,7 @@ impl SyscallClient {
     fn _recv(&mut self, obj: &Syscall) -> &Syscall {
         let mut buffer = [0; 10];
         let data = self.sock.read_exact(&mut buffer);
-        let res = &data.to_be_bytes():
+        let res = &data.to_be_bytes()?;
         let obj_data = self.sock.read_to_end(res[0]);
         Syscall::decode(obj_data);
         return obj;
@@ -101,24 +99,28 @@ impl SyscallClient {
     }
 }
 
-struct File {
+struct DirEntry {
     fd: u64,
     client: SyscallClient,
 }
 
+struct File {
+    entry: DirEntry,
+}
+
 impl File {
-    fn new(fd: u64, client: SyscallClient) -> Self {
-        File { fd, client }
+    fn new(entry: DirEntry) -> Self {
+        File { entry }
     }
 
     fn read(&mut self) -> Result<Option<Vec<u8>> {
         // combine syscall definitions
         let req = Syscall {
-            syscall: Some(syscall::Syscall::DentRead(self.fd)),
+            syscall: Some(syscall::Syscall::DentRead(entry.fd)),
         };
-        self.syscall._send(&req)?;
+        self.client._send(&req)?;
 
-        let response: DentResult = self.syscall._recv(DentResult());
+        let response: DentResult = self.client._recv(DentResult());
         if response.success {
             Ok(response.data)
         } else {
@@ -130,14 +132,14 @@ impl File {
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentUpdate(
                 syscall::DentUpdate {
-                    fd: self.fd,
+                    fd: entry.fd,
                     kind: Some(dent_update::Kind::File(data)),
                 }
             )),
         };
-        self.syscall._send(&req)?;
+        self.client._send(&req)?;
 
-        let response: DentResult = self.syscall._recv(DentResult());
+        let response: DentResult = self.client._recv(DentResult());
         Ok(response.success)
     }
 
@@ -159,6 +161,40 @@ impl File {
             return response.success
     */
 }
+
+struct FacetedDirectory {
+    entry: DirEntry,
+}
+
+impl FacetedDirectory {
+    fn ls() -> VsockStream {
+        let req = Syscall {
+            syscall: Some(syscall::Syscall::DentLsFaceted(
+                syscall::DentLsFaceted {
+                    fd: entry.fd,
+                }
+            )),
+        };
+        self.client._send(&req)?;
+        let res: DentLsFacetedResult = self.client._recv(DentLsFacetedResult());
+        if res != None {
+            return None;
+        }
+        else {
+            return None;
+        }
+    }
+}
+/* 
+class FacetedDirectory(DirEntry):
+    def ls(self):
+        req = syscalls_pb2.Syscall(dentLsFaceted = syscalls_pb2.DentLsFaceted(fd = self.fd))
+        self.syscall._send(req)
+        res = self.syscall._recv(syscalls_pb2.DentLsFacetedResult())
+        if res is not None:
+            return list(map(_Printer()._MessageToJsonObject, res.facets))
+        else:
+            return None*/
 
 struct HelloFS {
     client: SyscallClient // otherwise make it global variable
