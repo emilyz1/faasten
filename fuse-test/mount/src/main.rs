@@ -117,7 +117,7 @@ impl File {
     fn read(&mut self) -> Result<Option<Vec<u8>>> {
         // combine syscall definitions
         let req = Syscall {
-            syscall: Some(syscall::Syscall::DentRead(entry.fd)),
+            syscall: Some(syscall::Syscall::DentRead(self.entry.fd)),
         };
         self.entry.client._send(&req)?;
 
@@ -132,8 +132,8 @@ impl File {
     fn write(&mut self, data: Vec<u8>) -> bool {
         let req = Syscall {
             syscall: Some(syscall::Syscall::DentUpdate(
-                syscall::DentUpdate {
-                    fd: entry.fd,
+                syscall::Syscall::DentUpdate {
+                    fd: self.entry.fd,
                     kind: Some(dent_update::Kind::File(data)),
                 }
             )),
@@ -234,6 +234,21 @@ struct HelloFS {
 
 // use syscall client to bridge user parameters (e.g. list directory at path a/b -> create syscall request -> get Response from syscall client -> interpret and port to fuser) and faasten system
 impl Filesystem for HelloFS {
+    /* 
+    Faasten filesystem:
+    an example:
+        - faasten has different filesystem objects (type with a label). an example would be in faasten, the objects form a filesystem tree layout. top level will be a root directory, 
+        where root directory is a directory while there's a home directory under that's a faceted directory. although the system could be configured such that the root directory is a faceted directory,
+        but there are some security issues (no one has root privilege at runtime)
+        - directory stores links of other objects (file objects, directories, gate objects, etc.). a link (id) is an identifier of an object. each object has a unique id/soft link. kind of like a linked list of ids
+        - backend storage is a key-value storage with a random number generator for id for the key for the object
+        - fd: file descriptor (virtualized object id, local id at runtime. fd translated to actual unique id for security)
+        - suppose we have a file system with a root directory, home directory (faceted directory under root directory) - we have two objects: root directory object (id is 0), home faceted directory. root directory stores the id of the home directory
+        - above the faasten filesystem, we have cloud calls/syscalls: system that allows us to modify/operate on objects 
+            - (e.g. syscall called list. by giving this syscall a directory, returns a list of fds of objects under the directory). first create a syscall message, pass it to the vsock, vsock will return result and we just need to interpret the result
+            - suppose we want to list a path. first we need to get the fd of the path /a/b/c. we need to get fd of /a, but we know root is /. we make a list syscall on root directory (/) and get the fd of /a. use the result to get /a/b and /a/b/c
+        - files are objects that store raw bytes. internally in the key-value store, the value is gonna be some bytes in the file. blobs don't store raw bytes - stores the hash of its content. to get blob content, use hash to get the content by querying another database
+    */
     fn lookup(&mut self, _req: &fuser::Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
@@ -298,6 +313,23 @@ impl Filesystem for HelloFS {
 } 
 
 fn main() {
+    // build a kernel image (kernel code/linux) with fuse.ko (but does not include filesystem. no disks.)
+    // in faasten we use docker to generate the filesystem image (acts as a disk with filesystem layout)
+    // thus, we need to have a filesystem installed to have a basic filesystem structure
+    // now you have the base, still need a runtime image with libfuse to interpret code
+    // then we ne need a docker image to prepare the libfuse
+    // suppose we have a vm, and it only has the faasten filesystem and interpreter. second requirement to automatically run the code
+    // in the runtime filesystem, we use the system service (every time the os boots up, automatically execute some script, runs some python code we provide)
+    // executes some function and returns the result.
+    // some things i should know:
+    // - the vm we're using is from firecracker which is from amazon in rust. if you go to their github repo there should be some resource directories.
+    // - to build the kernel image you need to have a configuration file: defines some configuration including what kind of kernel module it will include
+    // - modify given firecracker configuration file to have fuse.ko enabled. then you can just try to build it
+    // - need to understand how to build the kernel image, enable fuse.ko, rebuild. once you have the kernel image built, first step is done.
+    // - second part is to have libfuse installed. then you can look at the docker. we use the docker to build the filesystem. docker will boostrap filesystem for you
+    // - use docker to help install some libraries/packages. then you can export its filesystem outside to a separate image (which is what we want)
+    // - look at how the filesystem is built, modify some docker files to have libfuse library installed, export to the filesystem.
+    // 
     let matches = Command::new("hello")
         .version(crate_version!())
         .author("Christopher Berner")
